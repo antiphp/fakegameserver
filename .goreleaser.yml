@@ -1,0 +1,45 @@
+version: 2
+project_name: fakegs
+dist: dist
+
+env:
+  - CGO_ENABLED=0
+
+builds:
+  - id: fakegs
+    binary: fakegs
+    main: ./cmd/fakegs
+    goos:
+      - linux
+    goarch:
+      - amd64
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+changelog:
+  disable: true
+
+archives:
+  - id: default
+    format: binary
+    allow_different_binary_count: true
+
+release:
+  disable: true
+
+snapshot:
+  version_template: "dev-{{ slice .FullCommit 0 8}}"
+
+dockers:
+  - dockerfile: Dockerfile
+    goos: linux
+    goarch: amd64
+    ids:
+      - fakegs
+    image_templates:
+      - "{{ if not .IsSnapshot }}{{ .Env.IMAGE_REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ if .IsNightly }}{{ .Version }}{{ else }}{{ .Tag }}{{ end }}{{ end }}"
+      - "{{ if .IsSnapshot }}fakegs:latest{{ end }}"
+    use: buildx
+    build_flag_templates:
+      - "--label=builder=goreleaser"
+      - "--label=app=fakegs"
+      - "--label=component=fakegs"

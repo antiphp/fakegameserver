@@ -6,7 +6,7 @@ type exitHookError struct {
 	hookFn func()
 }
 
-func (e *exitHookError) appendExitCode(code int) *exitHookError {
+func (e *exitHookError) maybeExitCode(code int) *exitHookError {
 	if e.hookFn != nil {
 		return e
 	}

@@ -1,4 +1,5 @@
-package fakegameserver
+// Package fakegs contains the fake game server runtime code.
+package fakegs
 
 import (
 	"context"
@@ -10,14 +11,17 @@ import (
 	lctx "github.com/hamba/logger/v2/ctx"
 )
 
+// OptFunc is an option function to apply server options.
 type OptFunc func(*Server)
 
+// WithExitAfter applies the option to exit after a specified duration.
 func WithExitAfter(dur time.Duration) OptFunc {
 	return func(s *Server) {
 		s.exitAfter = dur
 	}
 }
 
+// WithUpdateStateAfter applies the option to update the Agones state after a specified duration.
 func WithUpdateStateAfter(state State, dur time.Duration, agones *Agones) OptFunc {
 	return func(s *Server) {
 		s.states = append(s.states, state)
@@ -26,6 +30,7 @@ func WithUpdateStateAfter(state State, dur time.Duration, agones *Agones) OptFun
 	}
 }
 
+// Server is the fake game server.
 type Server struct {
 	exitAfter time.Duration
 
@@ -36,6 +41,7 @@ type Server struct {
 	log *logger.Logger
 }
 
+// New returns a new fake game server.
 func New(log *logger.Logger, opts ...OptFunc) *Server {
 	s := Server{
 		log: log,
@@ -46,7 +52,8 @@ func New(log *logger.Logger, opts ...OptFunc) *Server {
 	return &s
 }
 
-func (s *Server) Run(ctx context.Context) (string, error) {
+// Run runs the runtime routine for the fake game server and returns a stop reason or error.
+func (s *Server) Run(ctx context.Context) (string, error) { //nolint:cyclop // Readability.
 	var wg sync.WaitGroup
 	defer wg.Wait()
 
@@ -63,14 +70,16 @@ func (s *Server) Run(ctx context.Context) (string, error) {
 		exitAfter = t.C
 	}
 
-	var initStateChange chan int
-	var changeState chan State
-	var stateChanged <-chan State
+	var (
+		startStateChangeTimer chan int // Index of a.states[] & a.stateDurs[].
+		changeState           chan State
+		stateChanged          <-chan State
+	)
 	if len(s.states) > 0 {
-		initStateChange = make(chan int, 1)
-		defer close(initStateChange)
+		startStateChangeTimer = make(chan int, 1)
+		defer close(startStateChangeTimer)
 
-		initStateChange <- 0
+		startStateChangeTimer <- 0
 
 		changeState = make(chan State)
 		defer close(changeState)
@@ -97,7 +106,7 @@ func (s *Server) Run(ctx context.Context) (string, error) {
 				return "", fmt.Errorf("updating Agones state: %w", err)
 			}
 
-		case i := <-initStateChange:
+		case i := <-startStateChangeTimer:
 			if i >= len(s.states) {
 				break
 			}
@@ -119,7 +128,7 @@ func (s *Server) Run(ctx context.Context) (string, error) {
 
 				select {
 				case <-ctx.Done():
-				case initStateChange <- i + 1:
+				case startStateChangeTimer <- i + 1:
 				}
 			}()
 		}
