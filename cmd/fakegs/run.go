@@ -1,9 +1,9 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"syscall"
 	"time"
 
@@ -15,7 +15,7 @@ import (
 )
 
 func run(c *cli.Context) error { //nolint:cyclop,funlen // Readability.
-	ctx, cancel := context.WithCancel(c.Context)
+	ctx, cancel := signal.NotifyContext(c.Context, syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	log, err := cmd.NewLogger(c)
@@ -67,7 +67,7 @@ func run(c *cli.Context) error { //nolint:cyclop,funlen // Readability.
 		optFns = append(optFns, fakegs.WithUpdateStateAfter(agones.StateShutdown, c.Duration(flagShutdownAfter), client))
 	}
 	if !c.IsSet(flagExitAfter) {
-		log.Warn("No exit condition configured")
+		log.Warn("No exit condition configured; external signal required")
 	}
 
 	reason, err := fakegs.New(log, optFns...).Run(ctx)

@@ -1,32 +1,50 @@
 # Fake Game Server with Agones Integration
 
-This fake game server is a standalone executable with the goal of acting like a game server within a container environment.
+The fake game server, or short fakegs, is a standalone executable that acts like a very simple game server in a container environment.
+It's main goal is to be a drop-in replacement for systems managing game servers for testing purposes.
 
-The configurable features are:
+## Features
 
-- Transition into another Agones state
-- Exit after a while
-- Exit with a pre-defined code
+Supported features are:
+
+- Transition into [Agones](https://agones.dev/) the states `Ready`, `Allocated` and `Shutdown` after a configurable duration,
+- Exit after a configured duration,
+- Exit with a pre-defined code,
 - Crash with a pre-defined signal.
 
-Potential features for the future are:
+### Agones
 
-- Ignore SIGTERM/SIGINT
-- Specified jitter for exit timers to make load tests more realistic
-- Configurable memory consumption
-- Configurable CPU consumption
+The Agones integration allows scheduled state transitions.
+The state transitions are performed one after another, if set, in the order `Ready`, `Allocated`, `Shutdown`.
+
+| Argument            | Environment       | Type     | Default          | Example | Description                                                                                                                                    |
+|---------------------|-------------------|----------|------------------|---------|------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--agones-addr`     | `AGONES_ADDR`     | `string` | `localhost:9357` | -       | Address to reach the Agones SDK server.                                                                                                        |
+| `--ready-after`     | `READY_AFTER`     | `string` | `0s` (disabled)  | `10s`   | Duration after which to transition to Agones state `Ready`.                                                                                    |
+| `--allocated-after` | `ALLOCATED_AFTER` | `string` | `0s` (disabled)  | `5s`    | Duration after which to transition to Agones state `Allocated`. When the ready timer is not set, the timer starts immediately.                 |
+| `--shutdown-after`  | `SHUTDOWN_AFTER`  | `string` | `0s` (disabled)  | `30s`   | Duration after which to transition to Agones state `Shutdown`. When the ready and/or allocated timer is not set, the timer starts immediately. |
+
+With the given example values, the fakegs transitions to state `Ready` after `10s`, then `5s` later to `Allocated` (in total after `15s`),
+and `30s` later to `Shutdown` (in total after `45s`).
+
+### Exit Behavior
+
+| Argument        | Environment   | Type     | Default         | Example          | Description                                         |
+|-----------------|---------------|----------|-----------------|------------------|-----------------------------------------------------|
+| `--exit-after`  | `EXIT_AFTER`  | `string` | `0s` (disabled) | `2m`             | Duration after which to exit.                       |
+| `--exit-code`   | `EXIT_CODE`   | `int`    | (auto)          | `0`              | Exit with this code, when an exit condition is met. |
+| `--exit-signal` | `EXIT_SIGNAL` | `int`    | (none)          | `11` (`SIGSEGV`) | Send this signal, when an exit condition is met.    |
+
+With the given example values, the fakegs exits after `2m` with a crash (`SIGSEGV`) (`--exit-signal` would overwrite `--exit-code` as the exit condition).
 
 ## Usage
 
-```
+```$ go run ./cmd/fakegs/ --help
 NAME:
    Fake Game Server with Agones integration - A new cli application
 
 USAGE:
    Fake Game Server with Agones integration [global options] command [command options]
-
-VERSION:
-   <unknown>
 
 COMMANDS:
    help, h  Shows a list of commands or help for one command
@@ -37,16 +55,16 @@ GLOBAL OPTIONS:
 
    Agones integration
 
-   --agones-addr value      Agones address. (default: "localhost:9357") [$AGONES_ADDR]
-   --allocated-after value  Set Agones state to Allocated after the elapsed duration. State durations, if set, are stacked in order (Ready -> Allocated -> Shutdown). (default: 0s) [$ALLOCATED_AFTER]
-   --ready-after value      Set Agones state to Ready after the elapsed duration. State durations, if set, are stacked in order (Ready -> Allocated -> Shutdown). (default: 0s) [$READY_AFTER]
-   --shutdown-after value   Set Agones state to Shutdown after the elapsed duration. State durations, if set, are stacked in order (Ready -> Allocated -> Shutdown). (default: 0s) [$SHUTDOWN_AFTER]
+   --agones-addr value          Address to reach the Agones SDK server. (default: "localhost:9357") [$AGONES_ADDR]
+   --allocated-after Allocated  Duration after which to transition to Agones state Allocated. When the ready timer is not set, the timer starts immediately. (default: 0s) [$ALLOCATED_AFTER]
+   --ready-after Ready          Duration after which to transition to Agones state Ready. (default: 0s) [$READY_AFTER]
+   --shutdown-after Shutdown    Duration after which to transition to Agones state Shutdown. When the ready and/or allocated timer is not set, the timer starts immediately. (default: 0s) [$SHUTDOWN_AFTER]
 
    Exit behavior
 
-   --exit-after value   Exit after the elapsed duration. (default: 0s) [$EXIT_AFTER]
-   --exit-code value    Exit with this code. (default: 0) [$EXIT_CODE]
-   --exit-signal value  Exit with this signal. (default: 0) [$EXIT_SIGNAL]
+   --exit-after value   Duration after which to exit. (default: 0s) [$EXIT_AFTER]
+   --exit-code value    Exit with this code, when an exit condition is met. (default: 0) [$EXIT_CODE]
+   --exit-signal value  Send this signal, when an exit condition is met. (default: 0) [$EXIT_SIGNAL]
 
    Logging
 
@@ -54,3 +72,5 @@ GLOBAL OPTIONS:
    --log.format value                   Specify the format of logs. Supported formats: 'logfmt', 'json', 'console'. [$LOG_FORMAT]
    --log.level value                    Specify the log level. e.g. 'trace', 'debug', 'info', 'error'. (default: "info") [$LOG_LEVEL]
 ```
+
+or with Docker: `docker.io/antiphp/fakegs`.

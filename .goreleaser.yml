@@ -20,7 +20,7 @@ changelog:
 
 archives:
   - id: default
-    format: binary
+    formats: ['binary']
     allow_different_binary_count: true
 
 release:
@@ -28,6 +28,13 @@ release:
 
 snapshot:
   version_template: "dev-{{ slice .FullCommit 0 8}}"
+
+dockerhub:
+  - images:
+    - antiphp/fakegs
+    full_description:
+      from_file:
+        path: ./README.md
 
 dockers:
   - dockerfile: Dockerfile
@@ -39,4 +46,4 @@ dockers:
       - "docker.io/antiphp/fakegs:{{ .Tag }}"
       - "docker.io/antiphp/fakegs:latest"
     build_flag_templates:
-      - "-platform=linux/amd64"
+      - "--platform=linux/amd64"

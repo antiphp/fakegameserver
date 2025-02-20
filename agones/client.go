@@ -81,16 +81,23 @@ func (a *Client) UpdateState(ctx context.Context, st State) error {
 	switch st {
 	case StateReady:
 		_, err := a.sdk.Ready(ctx, &sdk.Empty{})
-		return fmt.Errorf("updating state to ready: %w", err)
+		if err != nil {
+			return fmt.Errorf("updating state to ready: %w", err)
+		}
 	case StateAllocated:
 		_, err := a.sdk.Allocate(ctx, &sdk.Empty{})
-		return fmt.Errorf("updating state to allocated: %w", err)
+		if err != nil {
+			return fmt.Errorf("updating state to allocated: %w", err)
+		}
 	case StateShutdown:
 		_, err := a.sdk.Shutdown(ctx, &sdk.Empty{})
-		return fmt.Errorf("updating state to shutdown: %w", err)
+		if err != nil {
+			return fmt.Errorf("updating state to shutdown: %w", err)
+		}
 	default:
 		return errors.New("unknown state: " + string(st))
 	}
+	return nil
 }
 
 // Run runs the state watcher and manages the distribution of the updates.
