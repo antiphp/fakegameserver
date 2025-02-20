@@ -19,7 +19,7 @@ changelog:
   disable: true
 
 archives:
-  - id: default
+  - id: fakegs
     formats: ['binary']
     allow_different_binary_count: true
 
