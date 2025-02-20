@@ -1,7 +1,7 @@
 # Fake Game Server with Agones Integration
 
 The fake game server, or short fakegs, is a standalone executable that acts like a very simple game server in a container environment.
-It's main goal is to be a drop-in replacement for systems managing game servers for testing purposes.
+Its main goal is to be a drop-in replacement for systems managing game servers for testing purposes.
 
 ## Features
 
