@@ -1,0 +1,38 @@
+run:
+  tests: false
+  timeout: 5m
+
+linters-settings:
+  cyclop:
+    max-complexity: 15
+    skip-tests: true
+  lll:
+    line-length: 160
+  gofumpt:
+    extra-rules: true
+  gosec:
+    excludes: [ ]
+  tagliatelle:
+    case:
+      use-field-name: true
+      rules:
+        json: pascal
+
+linters:
+  enable-all: true
+  disable:
+    - tenv # Deprecated.
+    - depguard
+    - err113
+    - exhaustruct
+    - funlen # Cyclop is more meaningful.
+    - gochecknoglobals
+    - ireturn
+    - mnd
+    - nlreturn
+    - varnamelen
+    - wsl
+
+issues:
+  exclude-use-default: false
+  exclude: [ ]
