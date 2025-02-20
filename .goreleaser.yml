@@ -40,4 +40,3 @@ dockers:
       - "docker.io/antiphp/fakegs:latest"
     build_flag_templates:
       - "-platform=linux/amd64"
-    push: "true"
