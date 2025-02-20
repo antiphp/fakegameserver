@@ -1,4 +1,4 @@
-package fakegs
+package agones
 
 import (
 	"context"
@@ -31,9 +31,9 @@ const (
 	StateShutdown State = "Shutdown"
 )
 
-// Agones manages the communication with Agones.
-type Agones struct {
-	client sdk.SDKClient
+// Client is the Agones client.
+type Client struct {
+	sdk sdk.SDKClient
 
 	mu       sync.Mutex
 	listener []chan<- *sdk.GameServer
@@ -44,8 +44,8 @@ type Agones struct {
 	doneCh chan struct{}
 }
 
-// NewAgonesClient returns a new Agones SDK client.
-func NewAgonesClient(addr string) (sdk.SDKClient, error) {
+// NewSDKClient returns a new Agones SDK client.
+func NewSDKClient(addr string) (sdk.SDKClient, error) {
 	conn, err := grpc.NewClient(
 		addr,
 		grpc.WithChainUnaryInterceptor(
@@ -60,33 +60,33 @@ func NewAgonesClient(addr string) (sdk.SDKClient, error) {
 	return sdk.NewSDKClient(conn), nil
 }
 
-// NewAgones returns a new agones client.
-func NewAgones(client sdk.SDKClient) *Agones {
-	return &Agones{
-		client:  client,
+// NewClient returns a new agones client.
+func NewClient(sdkClient sdk.SDKClient) *Client {
+	return &Client{
+		sdk:     sdkClient,
 		watchCh: make(chan *sdk.GameServer),
 		doneCh:  make(chan struct{}),
 	}
 }
 
 // Close closes active connections.
-func (a *Agones) Close() {
+func (a *Client) Close() {
 	close(a.doneCh)
 	a.wg.Wait()
 	close(a.watchCh)
 }
 
 // UpdateState updates the state.
-func (a *Agones) UpdateState(ctx context.Context, st State) error {
+func (a *Client) UpdateState(ctx context.Context, st State) error {
 	switch st {
 	case StateReady:
-		_, err := a.client.Ready(ctx, &sdk.Empty{})
+		_, err := a.sdk.Ready(ctx, &sdk.Empty{})
 		return fmt.Errorf("updating state to ready: %w", err)
 	case StateAllocated:
-		_, err := a.client.Allocate(ctx, &sdk.Empty{})
+		_, err := a.sdk.Allocate(ctx, &sdk.Empty{})
 		return fmt.Errorf("updating state to allocated: %w", err)
 	case StateShutdown:
-		_, err := a.client.Shutdown(ctx, &sdk.Empty{})
+		_, err := a.sdk.Shutdown(ctx, &sdk.Empty{})
 		return fmt.Errorf("updating state to shutdown: %w", err)
 	default:
 		return errors.New("unknown state: " + string(st))
@@ -94,7 +94,7 @@ func (a *Agones) UpdateState(ctx context.Context, st State) error {
 }
 
 // Run runs the state watcher and manages the distribution of the updates.
-func (a *Agones) Run(ctx context.Context) {
+func (a *Client) Run(ctx context.Context) {
 	a.wg.Add(1)
 	defer a.wg.Done()
 
@@ -128,7 +128,7 @@ func (a *Agones) Run(ctx context.Context) {
 }
 
 // WatchStateChanged returns a channel to watch for state changes.
-func (a *Agones) WatchStateChanged(ctx context.Context) <-chan State {
+func (a *Client) WatchStateChanged(ctx context.Context) <-chan State {
 	watchCh := make(chan *sdk.GameServer)
 	go func() {
 		defer close(watchCh)
@@ -170,7 +170,7 @@ func (a *Agones) WatchStateChanged(ctx context.Context) <-chan State {
 	return ch
 }
 
-func (a *Agones) watchGameServer(ctx context.Context) {
+func (a *Client) watchGameServer(ctx context.Context) {
 	a.wg.Add(1)
 	defer a.wg.Done()
 
@@ -184,7 +184,7 @@ func (a *Agones) watchGameServer(ctx context.Context) {
 		case <-time.After(bo.NextBackOff()):
 		}
 
-		conn, err := a.client.WatchGameServer(ctx, &sdk.Empty{})
+		conn, err := a.sdk.WatchGameServer(ctx, &sdk.Empty{})
 		if err != nil {
 			continue
 		}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/antiphp/fakegs"
+	"github.com/antiphp/fakegs/agones"
 	"github.com/hamba/cmd/v2"
 	lctx "github.com/hamba/logger/v2/ctx"
 	"github.com/urfave/cli/v2"
@@ -24,16 +25,16 @@ func run(c *cli.Context) error { //nolint:cyclop,funlen // Readability.
 
 	log.Info("Fake game server started")
 
-	var agones *fakegs.Agones
+	var client *agones.Client
 	if c.IsSet(flagReadyAfter) || c.IsSet(flagAllocatedAfter) || c.IsSet(flagShutdownAfter) {
-		client, err := fakegs.NewAgonesClient(c.String(flagAgonesAddr))
+		sdkClient, err := agones.NewSDKClient(c.String(flagAgonesAddr))
 		if err != nil {
-			return fmt.Errorf("creating Agones client: %w", err)
+			return fmt.Errorf("creating Agones SDK client: %w", err)
 		}
-		agones = fakegs.NewAgones(client)
-		defer agones.Close()
+		client = agones.NewClient(sdkClient)
+		defer client.Close()
 
-		go agones.Run(ctx)
+		go client.Run(ctx)
 	}
 
 	var exitErr exitHookError
@@ -57,13 +58,13 @@ func run(c *cli.Context) error { //nolint:cyclop,funlen // Readability.
 		log.Warn("Multiple contradictory exit behaviors configured.")
 	}
 	if c.IsSet(flagReadyAfter) {
-		optFns = append(optFns, fakegs.WithUpdateStateAfter(fakegs.StateReady, c.Duration(flagReadyAfter), agones))
+		optFns = append(optFns, fakegs.WithUpdateStateAfter(agones.StateReady, c.Duration(flagReadyAfter), client))
 	}
 	if c.IsSet(flagAllocatedAfter) {
-		optFns = append(optFns, fakegs.WithUpdateStateAfter(fakegs.StateAllocated, c.Duration(flagAllocatedAfter), agones))
+		optFns = append(optFns, fakegs.WithUpdateStateAfter(agones.StateAllocated, c.Duration(flagAllocatedAfter), client))
 	}
 	if c.IsSet(flagShutdownAfter) {
-		optFns = append(optFns, fakegs.WithUpdateStateAfter(fakegs.StateShutdown, c.Duration(flagShutdownAfter), agones))
+		optFns = append(optFns, fakegs.WithUpdateStateAfter(agones.StateShutdown, c.Duration(flagShutdownAfter), client))
 	}
 	if !c.IsSet(flagExitAfter) {
 		log.Warn("No exit condition configured")

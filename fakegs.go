@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/antiphp/fakegs/agones"
 	"github.com/hamba/logger/v2"
 	lctx "github.com/hamba/logger/v2/ctx"
 )
@@ -22,11 +23,11 @@ func WithExitAfter(dur time.Duration) OptFunc {
 }
 
 // WithUpdateStateAfter applies the option to update the Agones state after a specified duration.
-func WithUpdateStateAfter(state State, dur time.Duration, agones *Agones) OptFunc {
+func WithUpdateStateAfter(state agones.State, dur time.Duration, client *agones.Client) OptFunc {
 	return func(s *Server) {
 		s.states = append(s.states, state)
 		s.stateDurs = append(s.stateDurs, dur)
-		s.agones = agones
+		s.agones = client
 	}
 }
 
@@ -34,9 +35,9 @@ func WithUpdateStateAfter(state State, dur time.Duration, agones *Agones) OptFun
 type Server struct {
 	exitAfter time.Duration
 
-	states    []State
+	states    []agones.State
 	stateDurs []time.Duration
-	agones    *Agones
+	agones    *agones.Client
 
 	log *logger.Logger
 }
@@ -72,8 +73,8 @@ func (s *Server) Run(ctx context.Context) (string, error) { //nolint:cyclop // R
 
 	var (
 		startStateChangeTimer chan int // Index of a.states[] & a.stateDurs[].
-		changeState           chan State
-		stateChanged          <-chan State
+		changeState           chan agones.State
+		stateChanged          <-chan agones.State
 	)
 	if len(s.states) > 0 {
 		startStateChangeTimer = make(chan int, 1)
@@ -81,7 +82,7 @@ func (s *Server) Run(ctx context.Context) (string, error) { //nolint:cyclop // R
 
 		startStateChangeTimer <- 0
 
-		changeState = make(chan State)
+		changeState = make(chan agones.State)
 		defer close(changeState)
 
 		stateChanged = s.agones.WatchStateChanged(ctx)

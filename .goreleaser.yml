@@ -36,10 +36,8 @@ dockers:
     ids:
       - fakegs
     image_templates:
-      - "{{ if not .IsSnapshot }}{{ .Env.IMAGE_REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ if .IsNightly }}{{ .Version }}{{ else }}{{ .Tag }}{{ end }}{{ end }}"
-      - "{{ if .IsSnapshot }}fakegs:latest{{ end }}"
-    use: buildx
+      - "docker.io/antiphp/fakegs:{{ .Tag }}"
+      - "docker.io/antiphp/fakegs:latest"
     build_flag_templates:
-      - "--label=builder=goreleaser"
-      - "--label=app=fakegs"
-      - "--label=component=fakegs"
+      - "-platform=linux/amd64"
+    push: "true"
