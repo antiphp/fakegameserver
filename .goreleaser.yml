@@ -1,14 +1,14 @@
 version: 2
-project_name: fakegs
+project_name: fakegameserver
 dist: dist
 
 env:
   - CGO_ENABLED=0
 
 builds:
-  - id: fakegs
-    binary: fakegs
-    main: ./cmd/fakegs
+  - id: gameserver
+    binary: gameserver
+    main: ./cmd/gameserver
     goos:
       - linux
     goarch:
@@ -19,7 +19,7 @@ changelog:
   disable: true
 
 archives:
-  - id: fakegs
+  - id: gameserver
     formats: ['binary']
     allow_different_binary_count: true
 
@@ -31,7 +31,7 @@ snapshot:
 
 dockerhub:
   - images:
-    - antiphp/fakegs
+    - antiphp/fakegameserver
     full_description:
       from_file:
         path: ./README.md
@@ -41,9 +41,9 @@ dockers:
     goos: linux
     goarch: amd64
     ids:
-      - fakegs
+      - gameserver
     image_templates:
-      - "docker.io/antiphp/fakegs:{{ .Tag }}"
-      - "docker.io/antiphp/fakegs:latest"
+      - "docker.io/antiphp/fakegameserver:{{ .Tag }}"
+      - "docker.io/antiphp/fakegameserver:latest"
     build_flag_templates:
       - "--platform=linux/amd64"

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"agones.dev/agones/pkg/sdk"
@@ -33,15 +34,17 @@ const (
 
 // Client is the Agones client.
 type Client struct {
-	sdk sdk.SDKClient
+	client sdk.SDKClient
+	health sdk.SDK_HealthClient
 
-	mu       sync.Mutex
-	listener []chan<- *sdk.GameServer
+	isLocal atomic.Bool
 
-	wg      sync.WaitGroup
-	watchCh chan *sdk.GameServer
+	mu            sync.Mutex
+	stateWatchers []func(State)
+	connWatchers  []func(error)
 
-	doneCh chan struct{}
+	state   State
+	connErr *error
 }
 
 // NewSDKClient returns a new Agones SDK client.
@@ -60,37 +63,52 @@ func NewSDKClient(addr string) (sdk.SDKClient, error) {
 	return sdk.NewSDKClient(conn), nil
 }
 
-// NewClient returns a new agones client.
-func NewClient(sdkClient sdk.SDKClient) *Client {
+// NewClient returns a new Agones client.
+func NewClient(sdk sdk.SDKClient) *Client {
 	return &Client{
-		sdk:     sdkClient,
-		watchCh: make(chan *sdk.GameServer),
-		doneCh:  make(chan struct{}),
+		client: sdk,
 	}
 }
 
-// Close closes active connections.
-func (a *Client) Close() {
-	close(a.doneCh)
-	a.wg.Wait()
-	close(a.watchCh)
+// IsLocal determines if the SDK server runs in local development mode.
+func (c *Client) IsLocal() bool {
+	return c.isLocal.Load()
+}
+
+// Health sends a health report.
+func (c *Client) Health(ctx context.Context) error {
+	if c.health == nil {
+		var err error
+		c.health, err = c.client.Health(ctx)
+		if err != nil {
+			return err
+		}
+	}
+	if err := c.health.Send(&sdk.Empty{}); err != nil {
+		c.health = nil // Try re-connect.
+		return err
+	}
+	return nil
 }
 
 // UpdateState updates the state.
-func (a *Client) UpdateState(ctx context.Context, st State) error {
+func (c *Client) UpdateState(ctx context.Context, st State) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
 	switch st {
 	case StateReady:
-		_, err := a.sdk.Ready(ctx, &sdk.Empty{})
+		_, err := c.client.Ready(ctx, &sdk.Empty{})
 		if err != nil {
 			return fmt.Errorf("updating state to ready: %w", err)
 		}
 	case StateAllocated:
-		_, err := a.sdk.Allocate(ctx, &sdk.Empty{})
+		_, err := c.client.Allocate(ctx, &sdk.Empty{})
 		if err != nil {
 			return fmt.Errorf("updating state to allocated: %w", err)
 		}
 	case StateShutdown:
-		_, err := a.sdk.Shutdown(ctx, &sdk.Empty{})
+		_, err := c.client.Shutdown(ctx, &sdk.Empty{})
 		if err != nil {
 			return fmt.Errorf("updating state to shutdown: %w", err)
 		}
@@ -100,89 +118,27 @@ func (a *Client) UpdateState(ctx context.Context, st State) error {
 	return nil
 }
 
-// Run runs the state watcher and manages the distribution of the updates.
-func (a *Client) Run(ctx context.Context) {
-	a.wg.Add(1)
-	defer a.wg.Done()
+// WatchConnection calls the given function when the Agones connectivity changes.
+func (c *Client) WatchConnection(ctx context.Context, fn func(error)) {
+	idx := c.subConnWatcher(fn)
+	defer c.unsubConnWatcher(idx)
 
-	ctx, cancel := context.WithCancel(ctx) // For doneCh.
-	defer cancel()
-
-	go a.watchGameServer(ctx)
-
-	for {
-		var gs *sdk.GameServer
-		select {
-		case <-a.doneCh:
-			return
-		case <-ctx.Done():
-			return
-		case gs = <-a.watchCh:
-		}
-
-		func() {
-			a.mu.Lock()
-			defer a.mu.Unlock()
-
-			for _, c := range a.listener {
-				select {
-				case <-ctx.Done():
-				case c <- gs:
-				}
-			}
-		}()
-	}
+	<-ctx.Done()
 }
 
-// WatchStateChanged returns a channel to watch for state changes.
-func (a *Client) WatchStateChanged(ctx context.Context) <-chan State {
-	watchCh := make(chan *sdk.GameServer)
-	go func() {
-		defer close(watchCh)
-		<-ctx.Done()
-	}()
+// WatchState calls the given function when the Agones state changes.
+func (c *Client) WatchState(ctx context.Context, fn func(State)) {
+	idx := c.subStateWatcher(fn)
+	defer c.unsubStateWatcher(idx)
 
-	a.mu.Lock()
-	a.listener = append(a.listener, watchCh)
-	a.mu.Unlock()
-
-	ch := make(chan State)
-	go func() {
-		defer close(ch)
-
-		var gs *sdk.GameServer
-		var prevState State
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case gs = <-watchCh:
-			}
-
-			state := State(gs.GetStatus().GetState())
-			if state == prevState {
-				continue
-			}
-
-			if prevState != "" { // Skip first change, usually not interesting.
-				select {
-				case <-ctx.Done():
-				case ch <- state:
-				}
-			}
-
-			prevState = state
-		}
-	}()
-	return ch
+	<-ctx.Done()
 }
 
-func (a *Client) watchGameServer(ctx context.Context) {
-	a.wg.Add(1)
-	defer a.wg.Done()
-
+// Run runs the Agones client.
+func (c *Client) Run(ctx context.Context) {
 	bo := backoff.NewExponentialBackOff()
-	bo.MaxElapsedTime = 0 // Retry forever.
+	bo.MaxElapsedTime = 0
+	bo.MaxInterval = 5 * time.Second
 
 	for {
 		select {
@@ -191,23 +147,85 @@ func (a *Client) watchGameServer(ctx context.Context) {
 		case <-time.After(bo.NextBackOff()):
 		}
 
-		conn, err := a.sdk.WatchGameServer(ctx, &sdk.Empty{})
+		conn, err := c.client.WatchGameServer(ctx, &sdk.Empty{})
 		if err != nil {
+			c.notifyConnWatchers(err)
 			continue
 		}
 
+		c.notifyConnWatchers(nil)
 		bo.Reset()
 
+		var raw *sdk.GameServer
 		for {
-			gs, err := conn.Recv()
+			raw, err = conn.Recv()
 			if err != nil {
+				c.notifyConnWatchers(err)
 				break
 			}
 
-			select {
-			case <-ctx.Done():
-			case a.watchCh <- gs:
-			}
+			c.notifyStateWatchers(State(raw.GetStatus().GetState()))
+			c.isLocal.Store(raw.GetObjectMeta().GetLabels()["islocal"] == "true")
 		}
 	}
+}
+
+func (c *Client) notifyConnWatchers(err error) {
+	if c.connErr != nil && errors.Is(*c.connErr, err) {
+		return
+	}
+	c.connErr = &err
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for _, fn := range c.connWatchers {
+		fn(err)
+	}
+}
+
+func (c *Client) notifyStateWatchers(state State) {
+	if c.state == state {
+		return
+	}
+	c.state = state
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for _, fn := range c.stateWatchers {
+		fn(state)
+	}
+}
+
+func (c *Client) subConnWatcher(fn func(error)) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.connWatchers = append(c.connWatchers, fn)
+	return len(c.connWatchers) - 1
+}
+
+func (c *Client) unsubConnWatcher(idx int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Overwrite instead of delete to keep indexes valid.
+	c.connWatchers[idx] = func(error) {}
+}
+
+func (c *Client) subStateWatcher(fn func(State)) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.stateWatchers = append(c.stateWatchers, fn)
+	return len(c.stateWatchers) - 1
+}
+
+func (c *Client) unsubStateWatcher(idx int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Overwrite instead of delete to keep indexes valid.
+	c.stateWatchers[idx] = func(State) {}
 }
