@@ -1,7 +1,7 @@
 #Test
 
 test:
-	@go test -cover -race ./...
+	@GOEXPERIMENT=synctest go test -cover -race ./...
 .PHONY: test
 
 #Lint
