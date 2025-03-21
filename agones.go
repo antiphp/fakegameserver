@@ -4,9 +4,12 @@ import (
 	"context"
 	"slices"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/antiphp/fakegameserver/agones"
+	"github.com/antiphp/fakegameserver/internal/exiterror"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -61,7 +64,7 @@ func (w *AgonesWatcher) Run(ctx context.Context, queue Queue) {
 	go w.client.WatchState(ctx, func(state agones.State) {
 		queue.Add(Message{
 			Type:        MessageTypeAgonesUpdate,
-			Description: "Agones state changed to " + string(state),
+			Description: "Agones state change received for " + string(state),
 			Payload:     state,
 		})
 	})
@@ -272,7 +275,7 @@ func (u *AgonesStateTimer) Run(ctx context.Context, queue Queue) {
 
 		queue.Add(Message{
 			Type:        MessageTypeAgonesRequestUpdate,
-			Description: "Requesting Agones state update: " + string(state),
+			Description: "Requesting Agones state update to " + string(state),
 			Payload:     state,
 		})
 	}
@@ -341,7 +344,8 @@ func (s *Shutdown) Run(ctx context.Context, q Queue) {
 
 	q.Add(Message{
 		Type:        MessageTypeExit,
-		Description: "Emulating Agones behavior by exiting after state change to Shutdown",
+		Description: "Agones state changed to Shutdown, emulating the behavior of Agones in a non-local development environment with SIGTERM",
+		Error:       exiterror.New(nil, ptr.To[int](int(syscall.SIGTERM))),
 	})
 }
 

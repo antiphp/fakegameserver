@@ -1,6 +1,6 @@
 module github.com/antiphp/fakegameserver
 
-go 1.23.6
+go 1.24.1
 
 require (
 	agones.dev/agones v1.47.0

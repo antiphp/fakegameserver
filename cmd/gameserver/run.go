@@ -7,6 +7,7 @@ import (
 
 	"github.com/antiphp/fakegameserver"
 	"github.com/antiphp/fakegameserver/agones"
+	"github.com/antiphp/fakegameserver/internal/exiterror"
 	"github.com/hamba/cmd/v2/observe"
 	lctx "github.com/hamba/logger/v2/ctx"
 	"github.com/urfave/cli/v2"
@@ -18,7 +19,7 @@ func run(c *cli.Context) error {
 	defer cancel()
 
 	obsvr, err := observe.NewFromCLI(c, "fakegameserver", &observe.Options{
-		LogTimeFormat: "2006-01-02T15:04:05.99Z07:00",
+		LogTimeFormat: "2006-01-02T15:04:05.999Z07:00",
 		LogTimestamps: true,
 	})
 	if err != nil {
@@ -63,8 +64,9 @@ func run(c *cli.Context) error {
 		}
 		gs.AddHandler(stateTimer)
 
-		shutdown := fakegameserver.NewAgonesShutdown(client.IsLocal)
-		gs.AddHandler(shutdown)
+		gs.AddHandler(fakegameserver.NewAgonesShutdown(func() bool {
+			return (client.IsLocal() && !c.IsSet(flagExitOnShutdown)) || c.Bool(flagExitOnShutdown)
+		}))
 	}
 
 	gs.AddHandler(healthStatus)
@@ -76,17 +78,17 @@ func run(c *cli.Context) error {
 	if c.IsSet(flagExitSignal) {
 		sig = ptr.To[int](c.Int(flagExitSignal))
 	}
-	exitErr := newExitErr(code, sig)
+	exitErr := exiterror.New(code, sig)
 
 	reason, err := gs.Run(ctx)
 	if err != nil {
-		wrapErr := wrapExitErrs(err, exitErr, newExitErr(ptr.To(1), nil))
-		obsvr.Log.Info("Game server stopped with error", lctx.Err(err), lctx.Str("exit", wrapErr.Error()))
+		wrapErr := exiterror.Wrap(exitErr, err, exiterror.New(ptr.To(1), nil))
+		obsvr.Log.Info("Game server stopped with error", lctx.Str("exit", wrapErr.Error()))
 
 		return wrapErr
 	}
 
-	wrapErr := wrapExitErrs(nil, exitErr, newExitErr(ptr.To(0), nil))
+	wrapErr := exiterror.Wrap(exitErr, exiterror.New(ptr.To(0), nil))
 	obsvr.Log.Info("Game server stopped", lctx.Str("reason", reason), lctx.Str("exit", wrapErr.Error()))
 	return wrapErr
 }

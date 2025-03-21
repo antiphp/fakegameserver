@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/antiphp/fakegameserver/internal/exiterror"
 	"github.com/ettle/strcase"
 	"github.com/hamba/cmd/v2"
 	"github.com/urfave/cli/v2"
@@ -21,6 +22,7 @@ const (
 	flagReadyAfter           = "ready-after"
 	flagAllocatedAfter       = "allocated-after"
 	flagShutdownAfter        = "shutdown-after"
+	flagExitOnShutdown       = "shutdown-causes-exit"
 	flagHealthReportDelay    = "health-report-delay"
 	flagHealthReportInterval = "health-report-interval"
 
@@ -34,63 +36,70 @@ var flags = cmd.Flags{
 	&cli.IntFlag{
 		Name:     flagExitCode,
 		Usage:    "Exit with this code, when an exit condition is met.",
-		EnvVars:  []string{strcase.ToSNAKE(flagExitCode)},
+		EnvVars:  []string{strcase.ToSNAKE(prefixEnv(flagExitCode))},
 		Category: catExit,
 	},
 	&cli.IntFlag{
 		Name:     flagExitSignal,
 		Usage:    "Send this signal, when an exit condition is met.",
-		EnvVars:  []string{strcase.ToSNAKE(flagExitSignal)},
+		EnvVars:  []string{strcase.ToSNAKE(prefixEnv(flagExitSignal))},
 		Category: catExit,
 	},
 	&cli.DurationFlag{
 		Name:     flagExitAfter,
-		Usage:    "after after which to exit.",
-		EnvVars:  []string{strcase.ToSNAKE(flagExitAfter)},
+		Usage:    "Flag after which to exit.",
+		EnvVars:  []string{strcase.ToSNAKE(prefixEnv(flagExitAfter))},
 		Category: catExit,
 	},
 	&cli.BoolFlag{
 		Name:     flagAgonesDisabled,
 		Usage:    "Flag whether to disable the Agones integration.",
-		EnvVars:  []string{strcase.ToSNAKE(flagAgonesDisabled)},
+		EnvVars:  []string{strcase.ToSNAKE(prefixEnv(flagAgonesDisabled))},
 		Category: catAgones,
 	},
 	&cli.StringFlag{
 		Name:     flagAgonesAddr,
-		Usage:    "Address to reach the Agones Client server.",
+		Usage:    "Address to reach the Agones SDK server.",
 		Value:    "localhost:9357",
-		EnvVars:  []string{strcase.ToSNAKE(flagAgonesAddr)},
+		EnvVars:  []string{strcase.ToSNAKE(prefixEnv(flagAgonesAddr))},
 		Category: catAgones,
 	},
 	&cli.DurationFlag{
 		Name:     flagReadyAfter,
-		Usage:    "Duration after which to transition to the Agones state Ready.",
-		EnvVars:  []string{strcase.ToSNAKE(flagReadyAfter)},
+		Usage:    "Duration after which to transition to Agones state `Ready`.",
+		EnvVars:  []string{strcase.ToSNAKE(prefixEnv(flagReadyAfter))},
 		Category: catAgones,
 	},
 	&cli.DurationFlag{
 		Name:     flagAllocatedAfter,
-		Usage:    "Duration after which to transition to the Agones state Allocated. If a Ready timer is set, the timer starts after the Ready transition.",
-		EnvVars:  []string{strcase.ToSNAKE(flagAllocatedAfter)},
+		Usage:    "Duration after which to transition to Agones state `Allocated`. The `Ready`, `Allocated` and `Shutdown` timers are stacked. The first timer starts immediately.",
+		EnvVars:  []string{strcase.ToSNAKE(prefixEnv(flagAllocatedAfter))},
 		Category: catAgones,
 	},
 	&cli.DurationFlag{
 		Name:     flagShutdownAfter,
-		Usage:    "Duration after which to transition to the Agones state Shutdown. If a Ready or Allocated timer is set, the timer starts after the Ready or Allocated transition.",
-		EnvVars:  []string{strcase.ToSNAKE(flagShutdownAfter)},
+		Usage:    "Duration after which to transition to Agones state `Shutdown`. The `Ready`, `Allocated` and `Shutdown` timers are stacked. The first timer starts immediately.",
+		EnvVars:  []string{strcase.ToSNAKE(prefixEnv(flagShutdownAfter))},
 		Category: catAgones,
+	},
+	&cli.BoolFlag{
+		Name:        flagExitOnShutdown,
+		Usage:       "Intended to be used for local development, to compensate the lack of a SIGTERM that usually follows a `Shutdown` in Agones cluster environment.",
+		EnvVars:     []string{strcase.ToSNAKE(prefixEnv(flagExitOnShutdown))},
+		DefaultText: "'auto' - which enables the flag only if Agones runs in local development mode",
+		Category:    catAgones,
 	},
 	&cli.DurationFlag{
 		Name:     flagHealthReportDelay,
 		Usage:    "Period after which the first Agones health report is sent.",
-		EnvVars:  []string{strcase.ToSNAKE(flagHealthReportDelay)},
+		EnvVars:  []string{strcase.ToSNAKE(prefixEnv(flagHealthReportDelay))},
 		Category: catAgones,
 	},
 	&cli.DurationFlag{
 		Name:     flagHealthReportInterval,
 		Usage:    "Interval for the Agones health report.",
 		Value:    5 * time.Second,
-		EnvVars:  []string{strcase.ToSNAKE(flagHealthReportInterval)},
+		EnvVars:  []string{strcase.ToSNAKE(prefixEnv(flagHealthReportInterval))},
 		Category: catAgones,
 	},
 }.Merge(cmd.MonitoringFlags)
@@ -103,11 +112,15 @@ func main() {
 	app.Action = run
 
 	if err := app.RunContext(context.Background(), os.Args); err != nil {
-		var exitErr *exitError
+		var exitErr *exiterror.ExitError
 		if errors.As(err, &exitErr) {
-			exitErr.runHooks()
+			exitErr.RunHooks()
 		}
 		os.Exit(1)
 	}
 	os.Exit(0)
+}
+
+func prefixEnv(flag string) string {
+	return "FAKEGAMESERVER_" + flag
 }
