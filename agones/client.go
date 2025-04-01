@@ -1,3 +1,4 @@
+// Package agones provides a client for the Agones SDK.
 package agones
 
 import (

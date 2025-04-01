@@ -1,3 +1,4 @@
+// Package exiterror provides an error type that can handles how to exit the program.
 package exiterror
 
 import (
@@ -8,13 +9,14 @@ import (
 	"time"
 )
 
+// ExitError is an error that contains one or more hooks that exit the program.
 type ExitError struct {
 	names   []string
 	hookFns []func()
 }
 
 // New creates a new exit error with a signal and/or exit code.
-func New(code, sig *int) *ExitError { // TODO: Weird signature; allow to configure separately and use syscall.Signal instead?
+func New(code, sig *int) *ExitError {
 	if sig == nil && code == nil {
 		return nil
 	}
@@ -51,6 +53,7 @@ func (e *ExitError) addHooks(names []string, hookFns []func()) {
 	e.hookFns = append(e.hookFns, hookFns...)
 }
 
+// RunHooks executes all registered hooks in the order they were added.
 func (e *ExitError) RunHooks() {
 	for _, hook := range e.hookFns {
 		hook()

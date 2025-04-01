@@ -71,20 +71,23 @@ var flags = cmd.Flags{
 		Category: catAgones,
 	},
 	&cli.DurationFlag{
-		Name:     flagAllocatedAfter,
-		Usage:    "Duration after which to transition to Agones state `Allocated`. The `Ready`, `Allocated` and `Shutdown` timers are stacked. The first timer starts immediately.",
+		Name: flagAllocatedAfter,
+		Usage: "Duration after which to transition to Agones state `Allocated`. The `Ready`, `Allocated` and `Shutdown` timers are stacked. The first " +
+			"timer starts immediately.",
 		EnvVars:  []string{strcase.ToSNAKE(prefixEnv(flagAllocatedAfter))},
 		Category: catAgones,
 	},
 	&cli.DurationFlag{
-		Name:     flagShutdownAfter,
-		Usage:    "Duration after which to transition to Agones state `Shutdown`. The `Ready`, `Allocated` and `Shutdown` timers are stacked. The first timer starts immediately.",
+		Name: flagShutdownAfter,
+		Usage: "Duration after which to transition to Agones state `Shutdown`. The `Ready`, `Allocated` and `Shutdown` timers are stacked. The first " +
+			"timer starts immediately.",
 		EnvVars:  []string{strcase.ToSNAKE(prefixEnv(flagShutdownAfter))},
 		Category: catAgones,
 	},
 	&cli.BoolFlag{
-		Name:        flagExitOnShutdown,
-		Usage:       "Intended to be used for local development, to compensate the lack of a SIGTERM that usually follows a `Shutdown` in Agones cluster environment.",
+		Name: flagExitOnShutdown,
+		Usage: "Intended to be used for local development, to compensate the lack of a SIGTERM that usually follows a `Shutdown` in Agones cluster " +
+			"environment.",
 		EnvVars:     []string{strcase.ToSNAKE(prefixEnv(flagExitOnShutdown))},
 		DefaultText: "'auto' - which enables the flag only if Agones runs in local development mode",
 		Category:    catAgones,

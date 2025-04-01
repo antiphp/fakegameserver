@@ -1,6 +1,6 @@
 # Fake Game Server with Agones Integration
 
-The Fake Game Server, or just fakegs, is a standalone executable with no game-related functionality but an Agones (https://agones.dev/) integration.
+The Fake Game Server, short fakegs or fakegameserver, is a standalone executable with no game-related functionality but an Agones (https://agones.dev/) integration.
 It is intended for testing game server orchestration without the need for a real game server executable.
 
 ## Features
@@ -10,7 +10,7 @@ Supported features are:
 - Transition into [Agones](https://agones.dev/) the states `Ready`, `Allocated` and `Shutdown` after a configurable duration,
 - Exit after a configured duration,
 - Exit with a configured exit code,
-- Exit with a configured signal.
+- Exit with a configured signal (crash).
 
 ### Agones
 
@@ -79,29 +79,6 @@ GLOBAL OPTIONS:
    --log.ctx value [ --log.ctx value ]  A list of context field appended to every log. Format: key=value. [$LOG_CTX]
    --log.format value                   Specify the format of logs. Supported formats: 'logfmt', 'json', 'console'. [$LOG_FORMAT]
    --log.level value                    Specify the log level. e.g. 'trace', 'debug', 'info', 'error'. (default: "info") [$LOG_LEVEL]
-
-   Profiling
-
-   --profiling.dsn value                                The address to the Pyroscope server, in the format: 'http://basic:auth@server:port?token=auth-token&tenantid=tenant-id'. [$PROFILING_DSN]
-   --profiling.tags value [ --profiling.tags value ]    A list of tags appended to every profile. Format: key=value. [$PROFILING_TAGS]
-   --profiling.types value [ --profiling.types value ]  The type of profiles to include. Defaults to all. [$PROFILING_TYPES]
-   --profiling.upload-rate value                        The rate at which profiles are uploaded. (default: 15s) [$PROFILING_UPLOAD_RATE]
-
-   Stats
-
-   --stats.dsn value                          The DSN of a stats backend. [$STATS_DSN]
-   --stats.interval value                     The frequency at which the stats are reported. (default: 1s) [$STATS_INTERVAL]
-   --stats.prefix value                       The prefix of the measurements names. [$STATS_PREFIX]
-   --stats.tags value [ --stats.tags value ]  A list of tags appended to every measurement. Format: key=value. [$STATS_TAGS]
-
-   Tracing
-
-   --tracing.endpoint value                             The tracing backend endpoint. [$TRACING_ENDPOINT]
-   --tracing.endpoint-insecure                          Determines if the endpoint is insecure. (default: false) [$TRACING_ENDPOINT_INSECURE]
-   --tracing.exporter value                             The tracing backend. Supported: 'zipkin', 'otlphttp', 'otlpgrpc'. [$TRACING_EXPORTER]
-   --tracing.headers value [ --tracing.headers value ]  A list of headers appended to every trace when supported by the exporter. Format: key=value. [$TRACING_HEADERS]
-   --tracing.ratio value                                The ratio between 0 and 1 of sample traces to take. (default: 0.5) [$TRACING_RATIO]
-   --tracing.tags value [ --tracing.tags value ]        A list of tags appended to every trace. Format: key=value. [$TRACING_TAGS]
 ```
 
 ## Example
