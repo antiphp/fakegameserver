@@ -4,15 +4,25 @@ import (
 	"context"
 	"slices"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/antiphp/fakegameserver/agones"
+	"github.com/antiphp/fakegameserver/internal/exiterror"
+	"k8s.io/utils/ptr"
 )
 
 const (
-	MessageTypeAgonesUpdate        MessageType = "agonesUpdate"
-	MessageTypeAgonesConnection    MessageType = "agonesConnection"
-	MessageTypeAgonesReportHealth  MessageType = "agonesReportHealth"
+	// MessageTypeAgonesUpdate is the message type for Agones game server updates.
+	MessageTypeAgonesUpdate MessageType = "agonesUpdate"
+
+	// MessageTypeAgonesConnection is the message type for Agones connectivity updates.
+	MessageTypeAgonesConnection MessageType = "agonesConnection"
+
+	// MessageTypeAgonesReportHealth is the message type for health status reports.
+	MessageTypeAgonesReportHealth MessageType = "agonesReportHealth"
+
+	// MessageTypeAgonesRequestUpdate is the message type for Agones state update requests.
 	MessageTypeAgonesRequestUpdate MessageType = "agonesRequestUpdate"
 )
 
@@ -61,7 +71,7 @@ func (w *AgonesWatcher) Run(ctx context.Context, queue Queue) {
 	go w.client.WatchState(ctx, func(state agones.State) {
 		queue.Add(Message{
 			Type:        MessageTypeAgonesUpdate,
-			Description: "Agones state changed to " + string(state),
+			Description: "Agones state change received for " + string(state),
 			Payload:     state,
 		})
 	})
@@ -83,7 +93,7 @@ type AgonesStateUpdater struct {
 func NewAgonesStateUpdater(client *agones.Client) *AgonesStateUpdater {
 	return &AgonesStateUpdater{
 		client:  client,
-		stateCh: make(chan agones.State, 1), // TODO: close.
+		stateCh: make(chan agones.State, 1),
 	}
 }
 
@@ -117,13 +127,13 @@ func (u *AgonesStateUpdater) Run(ctx context.Context, queue Queue) {
 }
 
 // Consume consumes Agones state update requests.
-func (u *AgonesStateUpdater) Consume(msg Message) Message {
+func (u *AgonesStateUpdater) Consume(msg Message) {
 	if msg.Type != MessageTypeAgonesRequestUpdate {
-		return msg
+		return
 	}
 
-	u.stateCh <- msg.Payload.(agones.State)
-	return msg
+	state, _ := msg.Payload.(agones.State)
+	u.stateCh <- state
 }
 
 var (
@@ -136,9 +146,6 @@ type AgonesHealthReporter struct {
 	client    *agones.Client
 	initDelay time.Duration
 	intvl     time.Duration
-
-	mu     sync.Mutex
-	health func() error
 
 	ch chan bool
 }
@@ -199,13 +206,13 @@ func (r *AgonesHealthReporter) Run(ctx context.Context, queue Queue) {
 }
 
 // Consume consumes health status messages.
-func (r *AgonesHealthReporter) Consume(msg Message) Message {
+func (r *AgonesHealthReporter) Consume(msg Message) {
 	if msg.Type != MessageTypeHealthStatus {
-		return msg
+		return
 	}
 
-	r.ch <- msg.Payload.(bool)
-	return msg
+	healthy, _ := msg.Payload.(bool)
+	r.ch <- healthy
 }
 
 var (
@@ -272,25 +279,26 @@ func (u *AgonesStateTimer) Run(ctx context.Context, queue Queue) {
 
 		queue.Add(Message{
 			Type:        MessageTypeAgonesRequestUpdate,
-			Description: "Requesting Agones state update: " + string(state),
+			Description: "Requesting Agones state update to " + string(state),
 			Payload:     state,
 		})
 	}
 }
 
 // Consume consumes Agones connection and state update messages.
-func (u *AgonesStateTimer) Consume(msg Message) Message {
+func (u *AgonesStateTimer) Consume(msg Message) {
 	switch {
 	case msg.Type == MessageTypeAgonesConnection:
-		if msg.Payload.(bool) {
+		if val, _ := msg.Payload.(bool); val {
 			u.once.Do(func() { // Handle re-connects.
 				close(u.waitCh)
 			})
 		}
 	case msg.Type == MessageTypeAgonesUpdate:
-		u.setState(msg.Payload.(agones.State))
+		if state, ok := msg.Payload.(agones.State); ok {
+			u.setState(state)
+		}
 	}
-	return msg
 }
 
 func (u *AgonesStateTimer) setState(state agones.State) {
@@ -315,12 +323,14 @@ func shift[T any](s []T) (T, []T) {
 	return s[0], s[1:]
 }
 
+// Shutdown is a shutdown handler that exits the game server when Agones state changes.
 type Shutdown struct {
 	enabledFn func() bool
 	once      sync.Once
 	waitCh    chan struct{}
 }
 
+// NewAgonesShutdown returns a new Agones shutdown handler.
 func NewAgonesShutdown(enabledFn func() bool) *Shutdown {
 	return &Shutdown{
 		enabledFn: enabledFn,
@@ -328,6 +338,7 @@ func NewAgonesShutdown(enabledFn func() bool) *Shutdown {
 	}
 }
 
+// Run runs the shutdown handler.
 func (s *Shutdown) Run(ctx context.Context, q Queue) {
 	select {
 	case <-ctx.Done():
@@ -341,17 +352,21 @@ func (s *Shutdown) Run(ctx context.Context, q Queue) {
 
 	q.Add(Message{
 		Type:        MessageTypeExit,
-		Description: "Emulating Agones behavior by exiting after state change to Shutdown",
+		Description: "Agones state changed to Shutdown, emulating the behavior of Agones in a non-local development environment with SIGTERM",
+		Error:       exiterror.New(nil, ptr.To[int](int(syscall.SIGTERM))),
 	})
 }
 
-func (s *Shutdown) Consume(msg Message) Message {
-	if msg.Type != MessageTypeAgonesUpdate || msg.Payload.(agones.State) != agones.StateShutdown {
-		return msg
+// Consume consumes Agones state update messages.
+func (s *Shutdown) Consume(msg Message) {
+	if msg.Type != MessageTypeAgonesUpdate {
+		return
+	}
+	if state, ok := msg.Payload.(agones.State); ok && state != agones.StateShutdown {
+		return
 	}
 
 	s.once.Do(func() {
 		close(s.waitCh)
 	})
-	return msg
 }

@@ -11,6 +11,7 @@ import (
 	lctx "github.com/hamba/logger/v2/ctx"
 )
 
+// Message is a message produces by a message producer and consumable by a message consumer.
 type Message struct {
 	ID          string
 	Type        MessageType
@@ -21,25 +22,33 @@ type Message struct {
 	Created     time.Time
 }
 
+// MessageType is the type of a message.
 type MessageType string
 
 const (
+	// MessageTypeExit is the message type for exit messages.
 	MessageTypeExit MessageType = "exit"
+
+	// MessageTypeInfo is the message type for info messages.
 	MessageTypeInfo MessageType = "info"
 )
 
+// Queue is a message queue.
 type Queue interface {
 	Add(Message)
 }
 
+// Producer is a message producer.
 type Producer interface {
 	Run(context.Context, Queue)
 }
 
+// Consumer is a message consumer.
 type Consumer interface {
-	Consume(Message) Message // TODO: remove returning the message.
+	Consume(Message)
 }
 
+// GameServer is the game server.
 type GameServer struct {
 	queue     *queue.Fifo[Message]
 	producers []Producer
@@ -48,6 +57,7 @@ type GameServer struct {
 	log *logger.Logger
 }
 
+// New creates a new game server.
 func New(log *logger.Logger) *GameServer {
 	return &GameServer{
 		queue: queue.NewFifo[Message](),
@@ -55,14 +65,17 @@ func New(log *logger.Logger) *GameServer {
 	}
 }
 
+// AddProducer adds a message producer to the game server.
 func (g *GameServer) AddProducer(p ...Producer) {
 	g.producers = append(g.producers, p...)
 }
 
+// AddConsumer adds a mesage consumer to the game server.
 func (g *GameServer) AddConsumer(c ...Consumer) {
 	g.consumers = append(g.consumers, c...)
 }
 
+// AddHandler adds a message handler to the game server.
 func (g *GameServer) AddHandler(hdlr any) {
 	p, ok1 := hdlr.(Producer)
 	if ok1 {
@@ -77,6 +90,7 @@ func (g *GameServer) AddHandler(hdlr any) {
 	}
 }
 
+// Run starts the game server and runs all producers and consumers.
 func (g *GameServer) Run(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -109,7 +123,7 @@ func (g *GameServer) Run(ctx context.Context) (string, error) {
 		log.Info("Game server message received")
 
 		for _, c := range g.consumers {
-			msg = c.Consume(msg)
+			c.Consume(msg)
 		}
 
 		if msg.Type == MessageTypeExit {

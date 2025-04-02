@@ -5,8 +5,6 @@ import (
 	"errors"
 	"maps"
 	"slices"
-
-	"github.com/antiphp/fakegameserver/agones"
 )
 
 const (
@@ -21,7 +19,6 @@ var (
 
 // HealthStatus consumes all messages and reports the overall health status of the game server.
 type HealthStatus struct {
-	client   *agones.Client
 	waitFor  []MessageType
 	excludes []MessageType
 	ch       chan map[MessageType]error
@@ -98,15 +95,14 @@ func (r *HealthStatus) Run(ctx context.Context, queue Queue) {
 }
 
 // Consume consumes all messages.
-func (r *HealthStatus) Consume(msg Message) Message {
+func (r *HealthStatus) Consume(msg Message) {
 	if slices.Contains(r.excludes, msg.Type) {
-		return msg
+		return
 	}
 
 	r.ch <- map[MessageType]error{
 		msg.Type: msg.Error,
 	}
-	return msg
 }
 
 // isHealthy returns true if all reports are healthy.

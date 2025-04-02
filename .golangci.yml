@@ -21,19 +21,19 @@ linters-settings:
 linters:
   enable-all: true
   disable:
-    - tenv # Deprecated.
     - depguard
     - err113
     - exhaustruct
     - funlen # Cyclop is more meaningful.
     - gochecknoglobals
+    - inamedparam
     - ireturn
     - mnd
     - nlreturn
+    - tenv # Deprecated.
     - varnamelen
-    - wsl
     - wrapcheck
-    - inamedparam
+    - wsl
 
 issues:
   exclude-use-default: false
